@@ -18,3 +18,6 @@ typedef struct Chip8 {
     uint16_t keypad[16]; //16 bit keypad state
     uint8_t display[DISP_HEIGHT][DISP_WIDTH]; //display buffer
 } Chip8;
+
+void chip8_reset(Chip8 * chip8);
+void load_rom(char * filename, Chip8 *chip8);
