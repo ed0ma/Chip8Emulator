@@ -1,9 +1,11 @@
 #include "chip8.h"
+#include "chip8_opcodes.h"
 
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+
 
 static const uint8_t fontset[80] = {
     0xF0, 0x90, 0x90, 0x90, 0xF0, //0
@@ -86,6 +88,66 @@ void load_rom(char * filename, Chip8 *chip8){
 
 void chip8_step (Chip8 *chip8){
     // Fetch, decode, execute 1 opp code
+    uint16_t opcode = chip8_fetch_opcode(chip8);
+
+    uint16_t nnn = opcode &0x0FFF; //low 12 bits address
+    uint8_t n = opcode & 0x000F; //nibble low 4 bits
+    uint8_t x = (opcode & 0x0F00) >> 8; //low 4 bits of high byte
+    uint8_t y = (opcode & 0x00F0) >> 4; //upper 4 bits of low byte
+    uint8_t kk = opcode & 0x00FF; //lower 8 bits
+
+    switch (opcode & 0xF000)
+    //0x0000 family of instructions
+    {
+    case (0x0000):
+        switch (opcode)
+        {
+        case (0x00E0):
+            //Clear screen
+            op_00E0 (chip8);
+            break;
+        case (0x00EE):
+            //RET
+            //Return from subroutine
+            op_00EE(chip8);
+            break;
+        default:
+            printf("Unknown opcode: 0x%04X at PC: 0x%03X\n", opcode, (unsigned)(chip8->pc - 2));
+            assert(0 && "Unknown opcode");
+            break;
+        }
+        break;
+
+    case (0x1000):
+        //jump to nnn
+        op_1nnn(chip8, nnn);
+        break;
+    
+    case (0x6000):
+        // set Vx = kk
+        op_6xkk(chip8, x, kk);
+        break;
+    
+    case (0x7000):
+        //ADD
+        op_7xnn(chip8, x, kk);
+        break;
+
+    case (0xA000):
+        // set index register I
+        op_Annn(chip8, nnn);
+        break;
+
+    case (0xD000):
+        //Display
+        op_Dxyn(chip8, x, y, n);
+        break;
+
+    default:
+        printf("Unknown opcode: 0x%04X at PC: 0x%03X\n", opcode, (unsigned)(chip8->pc - 2));
+        assert(0 && "Unknown opcode");
+        break;
+    }
 }
 
 
@@ -113,4 +175,20 @@ void chip8_step (Chip8 *chip8){
     chip8->pc += 2;
 
     return instruction;
+}
+
+
+void timer_tick(Chip8 *chip8){
+    /*
+    Decrements delay_timer if > 0
+    Decrements sound timer if > 0
+    */
+
+    if (chip8->delay_timer > 0){
+        chip8->delay_timer --;
+    }
+
+    if (chip8->sound_timer > 0){
+        chip8->sound_timer --;
+    }
 }
