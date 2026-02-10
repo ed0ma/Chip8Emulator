@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <time.h>
 
 
 static const uint8_t fontset[80] = {
@@ -33,7 +35,11 @@ void chip8_reset(Chip8 * chip8){
     */
     memset(chip8, 0x0, sizeof(*chip8));
     chip8->pc = 0x200;
-    memcpy(chip8->memory[FONT_ADDRESS], &fontset, sizeof(fontset));
+    chip8->draw_flag = true;
+    memcpy(&chip8->memory[FONT_ADDRESS], fontset, sizeof(fontset));
+
+    //Random num gen
+    srand((unsigned)time(NULL));
 }
 
 void load_rom(char * filename, Chip8 *chip8){
@@ -123,6 +129,26 @@ void chip8_step (Chip8 *chip8){
         op_1nnn(chip8, nnn);
         break;
     
+    case (0x2000):
+        //call addr
+        op_2nnn(chip8, nnn);
+        break;
+
+    case (0x3000):
+        //3xkk: SE Vx, byte
+        op_3xkk(chip8, x, kk);
+        break;
+
+    case (0x4000):
+        //4xkk: SNE Vx, byte
+        op_4xkk(chip8, x, kk);
+        break;
+
+    case (0x5000):
+        //5xkk: SE Vx, Vy
+        op_5xy0(chip8, x, y);
+        break;
+
     case (0x6000):
         // set Vx = kk
         op_6xkk(chip8, x, kk);
@@ -130,7 +156,64 @@ void chip8_step (Chip8 *chip8){
     
     case (0x7000):
         //ADD
-        op_7xnn(chip8, x, kk);
+        op_7xkk(chip8, x, kk);
+        break;
+
+    case (0x8000):
+        switch (opcode & 0x000F)
+        {
+        case 0x0000:
+            //8xy0: Ld Vx, Vy
+            op_8xy0(chip8, x, y);
+            break;
+
+        case 0x0001:
+            // 8xy1: OR Vx, Vy
+            op_8xy1(chip8, x, y);
+            break;
+
+        case 0x0002:
+            //8xy2: AND Vx, Vy
+            op_8xy2(chip8, x, y);
+            break;
+
+        case 0x0003:
+            //8xy3: XOR Vx, Vy
+            op_8xy3(chip8, x, y);
+            break;
+
+        case 0x0004:
+            //8xy4: ADD Vx, Vy
+            op_8xy4(chip8, x, y);
+            break;
+
+        case 0x0005:
+            //8xy5: SUB Vx, Vy
+            op_8xy5(chip8, x, y);
+            break;
+
+        case 0x0006:
+            //8xy6: SHR Vx,
+            op_8xy6(chip8, x);
+            break;
+
+        case 0x0007:
+            //8xy7: SUBN Vx, Vy
+            op_8xy7(chip8, x, y);
+            break;
+
+        case 0x000E:
+            //8xyE: SHL Vx
+            op_8xyE(chip8, x);
+            break;
+        
+        default:
+            break;
+        }
+
+    case (0x9000):
+        //9xyo: SNE Vx, Vy
+        op_9xy0(chip8, x, y);
         break;
 
     case (0xA000):
@@ -138,11 +221,88 @@ void chip8_step (Chip8 *chip8){
         op_Annn(chip8, nnn);
         break;
 
+    case (0xB000):
+        //Bnnn: Jp V0, addr
+        op_Bnnn(chip8, nnn);
+        break;
+
+    case (0xC000):
+        //Cxkk: RND Vx, byte
+        op_Cxkk(chip8, x, kk);
+        break;
+
     case (0xD000):
         //Display
         op_Dxyn(chip8, x, y, n);
         break;
 
+    case (0xE000):
+        switch (opcode & 0xF0FF){
+            case (0xE09E):
+                //Ex9E: SKP Vx
+                op_Ex9E(chip8, x);
+                break;
+
+            case (0xE0A1):
+                //ExA1: SKNP Vx
+                op_ExA1(chip8, x);
+                break;
+
+            default:
+                break;
+        }
+
+    case (0xF000):
+        switch (opcode & 0xF0FF){
+            case (0xF007):
+                //Fx07: LD VX, DT
+                op_Fx07(chip8, x);
+                break;
+
+            case (0xF00A):
+                //Fx0A: LD Vx, k
+                op_Fx0A(chip8, x);
+                break;
+
+            case (0xF015):
+                //Fx15: LD DT, Vx
+                op_Fx15(chip8, x);
+                break;
+
+            case (0xF018):
+                //Fx18: LD ST, Vx
+                op_Fx18(chip8, x);
+                break;
+
+            case (0xF01E):
+                //Fx1E: ADD I, Vx
+                op_Fx1E(chip8, x);
+                break;
+
+            case (0xF029):
+                //Fx29: LD F, Vx
+                op_Fx29(chip8, x);
+                break;
+
+            case (0xF033):
+                //Fx33: LD B, Vx
+                op_Fx33(chip8, x);
+                break;
+
+            case (0xF055):
+                //Fx55: Ld [i], Vx
+                op_Fx55(chip8, x);
+                break;
+
+            case (0xF065):
+                //Fx65: LD Vx, [I]
+                op_Fx65(chip8, x);
+                break;
+
+            default:
+                break;
+        }
+    
     default:
         printf("Unknown opcode: 0x%04X at PC: 0x%03X\n", opcode, (unsigned)(chip8->pc - 2));
         assert(0 && "Unknown opcode");
@@ -178,7 +338,7 @@ void chip8_step (Chip8 *chip8){
 }
 
 
-void timer_tick(Chip8 *chip8){
+void chip8_timer_tick(Chip8 *chip8){
     /*
     Decrements delay_timer if > 0
     Decrements sound timer if > 0
@@ -190,5 +350,14 @@ void timer_tick(Chip8 *chip8){
 
     if (chip8->sound_timer > 0){
         chip8->sound_timer --;
+    }
+}
+
+void chip8_disp_to_pixels(Chip8 *chip8, uint32_t *pixels){
+    for (int y = 0; y < DISP_HEIGHT; y++) {
+        for (int x = 0; x < DISP_WIDTH; x++) {
+            pixels[y * DISP_WIDTH + x] =
+                chip8->display[y][x] ? 0xFFFFFFFFu : 0xFF000000u;
+        }
     }
 }

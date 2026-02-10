@@ -1,0 +1,1 @@
+int sdl_scancode_to_chip8(SDL_Scancode sc);

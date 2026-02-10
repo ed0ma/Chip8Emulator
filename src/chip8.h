@@ -23,4 +23,7 @@ typedef struct Chip8 {
 
 void chip8_reset(Chip8 * chip8);
 void load_rom(char * filename, Chip8 *chip8);
-void timer_tick(Chip8 *chip8);
+void chip8_step (Chip8 *chip8);
+uint16_t chip8_fetch_opcode (Chip8 *chip8);
+void chip8_timer_tick(Chip8 *chip8);
+void chip8_disp_to_pixels(Chip8 *chip8, uint32_t *pixels);
