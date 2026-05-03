@@ -212,10 +212,8 @@ void op_8xyE(Chip8 *chip8, uint8_t x){
     Set Vx = Vx SHL 1
     If MSB of Vx = 1, VF = 1
     */
-    if((chip8->V[x] & 0x1000) == 1){
-        chip8->V[0xF] = 1; 
-    }
-    chip8->V[x] = chip8->V[x] << 1;
+    chip8->V[0xF] = (chip8->V[x] & 0x80) ? 1 : 0;
+    chip8->V[x] <<= 1;
 }
 
 
