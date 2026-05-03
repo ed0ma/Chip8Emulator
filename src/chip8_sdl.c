@@ -1,4 +1,6 @@
+//src/chip8_sdl.c
 #include <SDL.h>
+
 
 int sdl_scancode_to_chip8(SDL_Scancode sc){
 // Keypad       Keyboard

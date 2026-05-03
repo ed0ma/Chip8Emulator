@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 
 void op_00E0 (Chip8 *chip8){
@@ -44,12 +45,12 @@ void op_2nnn(Chip8 *chip8, uint16_t nnn){
     2nnn: Call addr
     Call subroutine at nnn
 
-    sp = sp + 1
     stack[sp] = pc
+    sp = sp + 1
     pc = nnn
     */
-    chip8->sp ++;
     chip8->stack[chip8->sp] = chip8->pc;
+    chip8->sp ++;
     chip8->pc = nnn;
 }
 
@@ -258,44 +259,80 @@ void op_Cxkk(Chip8 *chip8, uint8_t x, uint8_t kk){
     chip8->V[x] = r & kk;
 }
 
+// void op_Dxyn(Chip8 *chip8, uint8_t x, uint8_t y, uint8_t n){
+//     chip8->V[0xF] = 0;
 
+//     uint8_t start_x = chip8->V[x] % 64;
+//     uint8_t start_y = chip8->V[y] % 32;
+
+//     for (int row = 0; row < n; row++){
+//         uint8_t sprite_data = chip8->memory[chip8->I + row];
+
+//         for (int pixel = 0; pixel < 8; pixel++){
+//             uint8_t sprite_bit = (sprite_data >> (7 - pixel)) & 1;
+
+//             if (sprite_bit) {
+//                 uint8_t x_cord = (start_x + pixel) % 64;
+//                 uint8_t y_cord = (start_y + row) % 32;
+
+//                 if (chip8->display[y_cord][x_cord]) {
+//                     chip8->V[0xF] = 1;
+//                 }
+
+//                 chip8->display[y_cord][x_cord] ^= 1;
+//             }
+//         }
+//     }
+// }
+
+// Non wrapping version
 void op_Dxyn(Chip8 *chip8, uint8_t x, uint8_t y, uint8_t n){
     /*
     Dxyn: DRW Vx, Vy, n
     Draw n-byte sprite from memory[I] at (Vx, Vy)
-    Sprite is XORed onto display; VF = 1 if any pixel is erased (collision), else 0
-    Start coords wrap (Vx % 64, Vy % 32); drawing clips at right/bottom edges
+
+    Start coordinate wraps:
+        Vx % DISP_WIDTH
+        Vy % DISP_HEIGHT
+
+    Sprite drawing clips at right/bottom edges.
     */
     chip8->V[0xF] = 0;
-    uint8_t y_cord = chip8->V[y] % 32;
+
+    int y_cord = chip8->V[y] % DISP_HEIGHT;
 
     for (int row = 0; row < n; row++){
-        uint8_t x_cord = chip8->V[x] % 64; //reset x cord
-        if (y_cord > 31){
-            //bottom edge of screen
+        int x_cord = chip8->V[x] % DISP_WIDTH;
+
+        if (y_cord >= DISP_HEIGHT){
             break;
         }
+
         uint8_t sprite_data = chip8->memory[chip8->I + row];
-        for (int pixel = 0; pixel < 8; pixel ++){
-            if(x_cord > 63){
-                //right edge of screen
+
+        for (int pixel = 0; pixel < 8; pixel++){
+            if (x_cord >= DISP_WIDTH){
                 break;
             }
-            uint8_t sprite_bit = (sprite_data >> (7 - pixel)) & 1; //Extract bits of the sprite from MSB to LSB
-            if (sprite_bit) {
-                // flip a 1 -> 0, that's a collision
-                if (chip8->display[y_cord][x_cord]) {
+
+            uint8_t sprite_bit = (sprite_data >> (7 - pixel)) & 1;
+
+            if (sprite_bit){
+                if (chip8->display[y_cord][x_cord]){
                     chip8->V[0xF] = 1;
                 }
 
-                // XOR toggles the pixel
                 chip8->display[y_cord][x_cord] ^= 1;
             }
-            x_cord ++;
+
+            x_cord++;
         }
-        y_cord ++;
+
+        y_cord++;
     }
+    chip8->draw_flag = true;
 }
+
 
 
 void op_Ex9E(Chip8 *chip8, uint8_t x){

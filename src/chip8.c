@@ -210,6 +210,7 @@ void chip8_step (Chip8 *chip8){
         default:
             break;
         }
+        break;
 
     case (0x9000):
         //9xyo: SNE Vx, Vy
@@ -251,6 +252,7 @@ void chip8_step (Chip8 *chip8){
             default:
                 break;
         }
+        break;
 
     case (0xF000):
         switch (opcode & 0xF0FF){
@@ -302,6 +304,7 @@ void chip8_step (Chip8 *chip8){
             default:
                 break;
         }
+        break;
     
     default:
         printf("Unknown opcode: 0x%04X at PC: 0x%03X\n", opcode, (unsigned)(chip8->pc - 2));
