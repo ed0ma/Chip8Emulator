@@ -125,6 +125,7 @@ void op_8xy1(Chip8 *chip8, uint8_t x, uint8_t y){
     OR is bitwise
     */
     chip8->V[x] = chip8->V[y] | chip8->V[x];
+    chip8->V[0xF] = 0; 
 }
 
 
@@ -135,6 +136,7 @@ void op_8xy2(Chip8 *chip8, uint8_t x, uint8_t y){
     AND is bitwise
     */
     chip8->V[x] = chip8->V[y] & chip8->V[x];
+    chip8->V[0xF] = 0; 
 }
 
 
@@ -145,6 +147,7 @@ void op_8xy3(Chip8 *chip8, uint8_t x, uint8_t y){
     XOR is bitwise
     */
     chip8->V[x] = chip8->V[y] ^ chip8->V[x];
+    chip8->V[0xF] = 0; 
 }
 
 
@@ -156,8 +159,8 @@ void op_8xy4(Chip8 *chip8, uint8_t x, uint8_t y){
     If result <= 255 VF = 0
     */
     uint16_t sum = (uint16_t)chip8->V[x] + (uint16_t)chip8->V[y];
+    chip8->V[x] = (uint8_t)sum;
     chip8->V[0xF] = (sum > 0xFF);
-    chip8->V[x] = (uint8_t)(sum & 0xFF);
 }
 
 
@@ -168,25 +171,26 @@ void op_8xy5(Chip8 *chip8, uint8_t x, uint8_t y){
     If Vx > Vy, VF = 1
     else VF = 0
     */
-    if(chip8->V[x] >= chip8->V[y]){
-        chip8->V[0xF] = 0x1;
-    }else{
-        chip8->V[0xF] = 0x0;
-    }
-    chip8->V[x] = chip8->V[x] - chip8->V[y];
+    uint8_t vx = chip8->V[x];
+    uint8_t vy = chip8->V[y];
+
+    chip8->V[x] = vx - vy;
+    chip8->V[0xF] = (vx >= vy);
 }
 
 
-void op_8xy6(Chip8 *chip8, uint8_t x){
+void op_8xy6(Chip8 *chip8, uint8_t x, uint8_t y){
     /*
-    8xy6: SHR Vx,
-    Set Vx = Vx SHR 1
-    If LSB of Vx = 1, VF = 1
+    8xy6: SHR Vx, Vy
+
+    Legacy/original CHIP-8 behavior:
+    VF = least significant bit of original Vy
+    Vx = Vy >> 1
     */
-    if((chip8->V[x] & 0x0001) == 1){
-        chip8->V[0xF] = 1; 
-    }
-    chip8->V[x] = chip8->V[x] >> 1;
+    uint8_t vy = chip8->V[y];
+
+    chip8->V[x] = vy >> 1;
+    chip8->V[0xF] = vy & 0x1;
 }
 
 
@@ -197,23 +201,26 @@ void op_8xy7(Chip8 *chip8, uint8_t x, uint8_t y){
     IF Vy > Vx, VF = 1
     else VF = 0
     */
-    if(chip8->V[x] < chip8->V[y]){
-        chip8->V[0xF] = 0x1;
-    }else{
-        chip8->V[0xF] = 0x0;
-    }
-    chip8->V[x] = chip8->V[y] - chip8->V[x];
+    uint8_t vx = chip8->V[x];
+    uint8_t vy = chip8->V[y];
+
+    chip8->V[x] = vy - vx;
+    chip8->V[0xF] = (vy >= vx);
 }
 
 
-void op_8xyE(Chip8 *chip8, uint8_t x){
+void op_8xyE(Chip8 *chip8, uint8_t x, uint8_t y){
     /*
-    8xyE: SHL Vx
-    Set Vx = Vx SHL 1
-    If MSB of Vx = 1, VF = 1
+    8xyE: SHL Vx, Vy
+
+    Legacy/original CHIP-8 behavior:
+    VF = most significant bit of original Vy
+    Vx = Vy << 1
     */
-    chip8->V[0xF] = (chip8->V[x] & 0x80) ? 1 : 0;
-    chip8->V[x] <<= 1;
+    uint8_t vy = chip8->V[y];
+
+    chip8->V[x] = vy << 1;
+    chip8->V[0xF] = vy >> 7;
 }
 
 
@@ -370,18 +377,46 @@ void op_Fx07(Chip8 *chip8, uint8_t x){
 
 void op_Fx0A(Chip8 *chip8, uint8_t x){
     /*
-    Fx0A: LD Vx, k
-    Wait for a key press, store the value of the key in Vx
+    Fx0A: LD Vx, K
+
+    Wait for a key press.
+    Store the pressed key in Vx.
+    Do not continue until that key is released.
     */
-    for (uint8_t k = 0; k <16; k++){
-        if (chip8->keypad[k]){
-            chip8->V[x] = k;
-            return;
-        }
+
+    // First time entering this instruction
+    if (!chip8->waiting_for_key){
+        chip8->waiting_for_key = true;
+        chip8->wait_key_reg = x;
+        chip8->wait_key_value = 0xFF;
     }
 
-    //no key pressed. Re execute opcode next cycle
-    chip8->pc -= 2;
+    // Phase 1: wait for a key to be pressed
+    if (chip8->wait_key_value == 0xFF){
+        for (uint8_t k = 0; k < 16; k++){
+            if (chip8->keypad[k]){
+                chip8->wait_key_value = k;
+                break;
+            }
+        }
+
+        // Still no key pressed, repeat Fx0A
+        chip8->pc -= 2;
+        return;
+    }
+
+    // Phase 2: key was pressed, now wait until that same key is released
+    if (chip8->keypad[chip8->wait_key_value]){
+        chip8->pc -= 2;
+        return;
+    }
+
+    // Key has been released, now store it and continue
+    chip8->V[chip8->wait_key_reg] = chip8->wait_key_value;
+
+    chip8->waiting_for_key = false;
+    chip8->wait_key_reg = 0;
+    chip8->wait_key_value = 0xFF;
 }
 
 
@@ -446,6 +481,7 @@ void op_Fx55(Chip8 *chip8, uint8_t x){
     for(uint8_t i = 0; i <= x; i++){
         chip8->memory[chip8->I + i] = chip8->V[i];
     }
+    chip8->I += x + 1;
 }
 
 
@@ -457,4 +493,5 @@ void op_Fx65(Chip8 *chip8, uint8_t x){
     for(uint8_t i = 0; i <= x; i++){
         chip8->V[i] = chip8->memory[chip8->I + i];
     }
+    chip8->I += x + 1;
 }

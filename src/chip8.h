@@ -19,6 +19,9 @@ typedef struct Chip8 {
     uint16_t keypad[16]; //16 bit keypad state
     uint8_t display[DISP_HEIGHT][DISP_WIDTH]; //display buffer
     bool draw_flag; //flag to see if image needs to be drawn
+    bool waiting_for_key;       //flag to track if Fx0A is waiting for key release
+    uint8_t wait_key_reg;       //register to store pressed key into after release
+    uint8_t wait_key_value;     //key value captured by Fx0A, 0xFF means no key captured yet
 } Chip8;
 
 void chip8_reset(Chip8 * chip8);

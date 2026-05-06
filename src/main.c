@@ -14,6 +14,43 @@
 #define TIMER_HZ 60.0
 #define DEBUG_STEP_MODE 1
 
+#define AUDIO_HZ 44100
+#define BEEP_HZ 440
+#define BEEP_VOLUME 3000
+
+typedef struct {
+    bool enabled; //true when sound_timer > 0
+    int phase;    //tracks position in beep wave
+} BeepState;
+
+void audio_callback(void *userdata, Uint8 *stream, int len){
+    BeepState *beep = (BeepState *)userdata;
+
+    int16_t *samples = (int16_t *)stream;
+    int sample_count = len / sizeof(int16_t);
+
+    int period = AUDIO_HZ / BEEP_HZ;
+    int half_period = period / 2;
+
+    for (int i = 0; i < sample_count; i++){
+        if (beep->enabled){
+            if (beep->phase < half_period){
+                samples[i] = BEEP_VOLUME;
+            } else {
+                samples[i] = -BEEP_VOLUME;
+            }
+
+            beep->phase++;
+
+            if (beep->phase >= period){
+                beep->phase = 0;
+            }
+        } else {
+            samples[i] = 0;
+        }
+    }
+}
+
 int main(int argc, char *argv[]){
     setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -28,7 +65,7 @@ int main(int argc, char *argv[]){
     load_rom(filename, &chip8);
 
     //_____SDL Initialization_____
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0){
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) != 0){
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
@@ -66,6 +103,32 @@ int main(int argc, char *argv[]){
         SDL_Quit();
         return 1;
     }
+    //______ Audio Setup ______
+    BeepState beep = { false, 0 };
+
+    SDL_AudioSpec want;
+    SDL_AudioSpec have;
+
+    SDL_zero(want);
+    want.freq = AUDIO_HZ;
+    want.format = AUDIO_S16SYS;
+    want.channels = 1;
+    want.samples = 512;
+    want.callback = audio_callback;
+    want.userdata = &beep;
+
+    SDL_AudioDeviceID audio_device = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+
+    if (audio_device == 0){
+        fprintf(stderr, "SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
+        SDL_DestroyTexture(texture);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_PauseAudioDevice(audio_device, 0);
 
     //______ Timing Set up _____
     uint64_t now_timer = 0;
@@ -102,6 +165,10 @@ int main(int argc, char *argv[]){
 
         //stop large delta
         if (delta_time > 0.1) delta_time = 0.1;
+
+        SDL_LockAudioDevice(audio_device);
+        beep.enabled = chip8.sound_timer > 0;
+        SDL_UnlockAudioDevice(audio_device);
 
         //SDL Events Processing
         SDL_Event event;
@@ -200,6 +267,7 @@ int main(int argc, char *argv[]){
     }
 
     //Clean up sdl objects
+    SDL_CloseAudioDevice(audio_device);
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

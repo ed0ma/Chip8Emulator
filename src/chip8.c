@@ -36,6 +36,9 @@ void chip8_reset(Chip8 * chip8){
     memset(chip8, 0x0, sizeof(*chip8));
     chip8->pc = 0x200;
     chip8->draw_flag = true;
+    chip8->waiting_for_key = false;
+    chip8->wait_key_reg = 0;
+    chip8->wait_key_value = 0xFF;
     memcpy(&chip8->memory[FONT_ADDRESS], fontset, sizeof(fontset));
 
     //Random num gen
@@ -194,7 +197,7 @@ void chip8_step (Chip8 *chip8){
 
         case 0x0006:
             //8xy6: SHR Vx,
-            op_8xy6(chip8, x);
+            op_8xy6(chip8, x, y);
             break;
 
         case 0x0007:
@@ -204,7 +207,7 @@ void chip8_step (Chip8 *chip8){
 
         case 0x000E:
             //8xyE: SHL Vx
-            op_8xyE(chip8, x);
+            op_8xyE(chip8, x, y);
             break;
         
         default:
